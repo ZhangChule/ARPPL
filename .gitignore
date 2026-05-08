@@ -1,0 +1,34 @@
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Runtime logs and local environment files
+*.log
+.env
+.env.*
+!.env.example
+
+# Backend runtime/generated files
+backend/records/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/.tmp/
+frontend/*.log
+
+# Generated experiment outputs
+testcase/**/output/
+testcase/**/output2/
+testcase/**/output3/
+testcase/**/logs/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
