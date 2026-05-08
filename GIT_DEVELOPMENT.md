@@ -11,7 +11,13 @@ This file records the Git/GitHub workflow for this project so future work can co
 - Local author name: `ZhangChule`
 - Local author email: `zhangchule_2002@163.com`
 
-Recorded on 2026-05-08. At this point the local directory already contains `.git`, but the current terminal cannot find the `git` executable. Based on `.git/refs/heads`, no local commits were found yet.
+Recorded on 2026-05-08. The local directory contains `.git`, the active branch is `main`, and the initial local commit exists:
+
+```text
+8b85cd3 chore: initialize ARPPL project repository
+```
+
+The current Codex terminal cannot find the `git` executable, but the user's IDE terminal can run Git. The initial push to GitHub failed because the machine could not connect to `github.com:443`.
 
 ## First Setup On A New Machine
 
@@ -66,17 +72,22 @@ git branch -M main
 
 ## First Commit Suggestion
 
-Check status before the first commit:
+The first commit has already been created locally. Before retrying the first push, check status:
 
 ```powershell
 git status
 ```
 
-Commit code, configs, and documentation first. Avoid committing all generated experiment outputs in the initial commit:
+If additional repository-management files were added after the first commit, commit them before pushing:
 
 ```powershell
-git add .gitignore GIT_DEVELOPMENT.md requirements.txt backend frontend
-git commit -m "chore: initialize ARPPL project repository"
+git add .gitattributes GIT_DEVELOPMENT.md
+git commit -m "docs: document git troubleshooting workflow"
+```
+
+Then push:
+
+```powershell
 git push -u origin main
 ```
 
@@ -132,6 +143,74 @@ npm run build
 ```
 
 If a verification step is too slow or requires unavailable data, record exactly what was and was not tested in the commit or handoff note.
+
+## Line Endings
+
+On Windows, Git may print a warning like:
+
+```text
+warning: in the working copy of 'requirements.txt', LF will be replaced by CRLF the next time Git touches it
+```
+
+This is not an error. It means Git is warning about line-ending conversion in the working tree. The repository includes `.gitattributes` to keep source, config, and documentation files normalized with LF line endings.
+
+If needed, inspect the current setting:
+
+```powershell
+git config --get core.autocrlf
+```
+
+Recommended local setting for this project:
+
+```powershell
+git config core.autocrlf false
+```
+
+After changing line-ending policy, refresh tracked files if necessary:
+
+```powershell
+git add --renormalize .
+git status
+```
+
+## GitHub Connectivity
+
+If push fails with:
+
+```text
+fatal: unable to access 'https://github.com/ZhangChule/ARPPL.git/': Failed to connect to github.com port 443
+```
+
+the local commit is usually safe; only the network push failed. Try:
+
+```powershell
+git remote -v
+git ls-remote https://github.com/ZhangChule/ARPPL.git
+git push -u origin main
+```
+
+If `git ls-remote` also times out, the problem is network/proxy/firewall access to GitHub, not the repository content.
+
+If using a local proxy, configure Git with the proxy port used on the machine, for example:
+
+```powershell
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
+```
+
+To remove proxy settings:
+
+```powershell
+git config --global --unset http.proxy
+git config --global --unset https.proxy
+```
+
+Alternative: use SSH after adding an SSH key to GitHub:
+
+```powershell
+git remote set-url origin git@github.com:ZhangChule/ARPPL.git
+git push -u origin main
+```
 
 ## Ignore Policy
 

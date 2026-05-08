@@ -13,6 +13,9 @@ venv/
 .env.*
 !.env.example
 
+# .npm-cache
+.npm-cache/
+
 # Backend runtime/generated files
 backend/records/
 
@@ -22,11 +25,8 @@ frontend/dist/
 frontend/.tmp/
 frontend/*.log
 
-# Generated experiment outputs
-testcase/**/output/
-testcase/**/output2/
-testcase/**/output3/
-testcase/**/logs/
+# Local test cases and generated experiment data
+testcase/
 
 # OS/editor noise
 .DS_Store

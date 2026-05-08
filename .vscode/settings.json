@@ -1,0 +1,9 @@
+{
+  "http.proxy": "http://127.0.0.1:7890",
+  "http.proxyStrictSSL": false,
+  "http.proxySupport": "override",
+  "terminal.integrated.env.windows": {
+    "http_proxy": "http://127.0.0.1:7890",
+    "https_proxy": "http://127.0.0.1:7890"
+  }
+}

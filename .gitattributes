@@ -1,0 +1,23 @@
+# Normalize text files in the repository.
+* text=auto
+
+# Keep source/config/docs as LF in Git and in the working tree.
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+
+# Binary assets and experiment files.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.xlsx binary
+*.ply binary
+*.bin binary
