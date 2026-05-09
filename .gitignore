@@ -18,12 +18,17 @@ venv/
 
 # Backend runtime/generated files
 backend/records/
+process_apps/*/backend/records/
 
 # Frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/
 frontend/.tmp/
 frontend/*.log
+process_apps/*/frontend/node_modules/
+process_apps/*/frontend/dist/
+process_apps/*/frontend/.tmp/
+process_apps/*/frontend/*.log
 
 # Local test cases and generated experiment data
 testcase/

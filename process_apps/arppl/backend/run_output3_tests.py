@@ -10,8 +10,8 @@ import numpy as np
 from arppy import ARPPLParameters, read_point_cloud_bytes, run_arppl
 
 
-ROOT = Path(__file__).resolve().parents[1]
-CASE_ROOT = ROOT / "testcase" / "Cavity structural components"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+CASE_ROOT = REPO_ROOT / "testcase" / "Cavity structural components"
 CASE_NAMES = ["cylinder", "cylinder_cross", "cylinder_cross_seg"]
 
 # The full files are 920k source points x 400k target points. Without a working

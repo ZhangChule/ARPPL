@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import './App.css'
@@ -55,6 +55,21 @@ type RecordVisualResponse = ExperimentRecord & {
   visual_sample_size: number
 }
 
+export type ArpplAppMode = 'standalone' | 'workflow'
+
+export type ArpplAppInitialData = {
+  result?: RegistrationResponse | null
+  records?: ExperimentRecord[]
+}
+
+export type ArpplAppProps = {
+  // standalone keeps the current full application; workflow trims local record
+  // management so the host platform can use the component as an embedded panel.
+  mode?: ArpplAppMode
+  initialData?: ArpplAppInitialData
+  apiBase?: string
+}
+
 type ViewerProps = {
   sourcePoints: number[][]
   targetPoints: number[][]
@@ -65,7 +80,7 @@ type ViewerProps = {
   showTarget: boolean
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000'
+const DEFAULT_API_BASE = resolveDefaultApiBase()
 const ALPHA_SYMBOL = '\u03B1'
 const ALPHA_MIN = -8
 const ALPHA_MAX = 2
@@ -77,7 +92,8 @@ const ALPHA_TICKS = [
   { value: 2, label: 'L2' },
 ]
 
-function App() {
+export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BASE }: ArpplAppProps) {
+  const normalizedApiBase = apiBase.replace(/\/$/, '')
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [targetFile, setTargetFile] = useState<File | null>(null)
   const [u, setU] = useState('0.001')
@@ -93,34 +109,55 @@ function App() {
   const [showTarget, setShowTarget] = useState(true)
   const [previewSourcePoints, setPreviewSourcePoints] = useState<number[][]>([])
   const [previewTargetPoints, setPreviewTargetPoints] = useState<number[][]>([])
-  const [result, setResult] = useState<RegistrationResponse | null>(null)
-  const [records, setRecords] = useState<ExperimentRecord[]>([])
+  const [result, setResult] = useState<RegistrationResponse | null>(initialData?.result ?? null)
+  const [records, setRecords] = useState<ExperimentRecord[]>(initialData?.records ?? [])
   const [selectedRecord, setSelectedRecord] = useState<ExperimentRecord | null>(null)
   const [status, setStatus] = useState('ready')
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const [error, setError] = useState('')
 
   const canRun = sourceFile !== null && targetFile !== null && status !== 'running' && status !== 'loading'
 
-  useEffect(() => {
-    void loadRecords()
-  }, [])
-
-  async function loadRecords() {
+  const loadRecords = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/arppl/records`)
-      if (!response.ok) return
+      const response = await fetch(`${normalizedApiBase}/records`)
+      if (!response.ok) {
+        setBackendStatus('offline')
+        return
+      }
       const data = (await response.json()) as { records: ExperimentRecord[] }
+      setBackendStatus('online')
       setRecords(data.records)
     } catch {
+      setBackendStatus('offline')
       // The comparison table is auxiliary; keep the main registration UI usable.
     }
-  }
+  }, [normalizedApiBase])
+
+  useEffect(() => {
+    if (mode !== 'standalone') return
+    let ignore = false
+    fetch(`${normalizedApiBase}/records`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { records?: ExperimentRecord[] } | null) => {
+        if (ignore) return
+        setBackendStatus(data?.records ? 'online' : 'offline')
+        if (data?.records) setRecords(data.records)
+      })
+      .catch(() => {
+        if (!ignore) setBackendStatus('offline')
+        // Initial history loading is auxiliary; manual refresh still reports errors through the UI flow.
+      })
+    return () => {
+      ignore = true
+    }
+  }, [mode, normalizedApiBase])
 
   async function clearRecords() {
     if (!window.confirm('Clear all experiment records?')) return
     setError('')
     try {
-      const response = await fetch(`${API_BASE}/arppl/records`, { method: 'DELETE' })
+      const response = await fetch(`${normalizedApiBase}/records`, { method: 'DELETE' })
       if (!response.ok) {
         const body = await response.json().catch(() => null)
         throw new Error(body?.detail ?? `HTTP ${response.status}`)
@@ -138,7 +175,7 @@ function App() {
     setStatus('loading')
     setError('')
     try {
-      const response = await fetch(`${API_BASE}/arppl/records/${encodeURIComponent(record.id)}/visual`)
+      const response = await fetch(`${normalizedApiBase}/records/${encodeURIComponent(record.id)}/visual`)
       if (!response.ok) {
         const body = await response.json().catch(() => null)
         throw new Error(body?.detail ?? `HTTP ${response.status}`)
@@ -226,7 +263,7 @@ function App() {
     form.append('visual_sample_size', visualSampleSize)
 
     try {
-      const response = await fetch(`${API_BASE}/arppl/register-files`, {
+      const response = await fetch(`${normalizedApiBase}/register-files`, {
         method: 'POST',
         body: form,
       })
@@ -256,7 +293,7 @@ function App() {
       })
     } catch (caught) {
       const message = caught instanceof TypeError && caught.message === 'Failed to fetch'
-        ? `Cannot reach backend at ${API_BASE}. Start uvicorn on port 8000, then retry.`
+        ? backendConnectionMessage(normalizedApiBase)
         : caught instanceof Error
           ? caught.message
           : 'Registration failed'
@@ -274,13 +311,14 @@ function App() {
   )
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell app-shell--${mode}`}>
       <section className="workbench">
         <aside className="control-panel">
           <div className="brand-row">
             <div>
               <h1>ARPPL</h1>
               <p>Point-to-plane registration</p>
+              <small className={`backend-indicator backend-${backendStatus}`}>Backend: {backendStatus}</small>
             </div>
             <StatusBadge status={status} />
           </div>
@@ -334,13 +372,15 @@ function App() {
             <Metric label="Time" value={result ? `${result.elapsed_seconds.toFixed(1)}s` : '--'} />
             <Metric label="RMSE" value={result ? formatNumber(result.deviation_stats.rmse) : '--'} />
           </section>
-          <ExperimentTable
-            records={records}
-            selectedRecord={selectedRecord}
-            onSelect={viewRecord}
-            onRefresh={loadRecords}
-            onClear={clearRecords}
-          />
+          {mode === 'standalone' && (
+            <ExperimentTable
+              records={records}
+              selectedRecord={selectedRecord}
+              onSelect={viewRecord}
+              onRefresh={loadRecords}
+              onClear={clearRecords}
+            />
+          )}
         </aside>
 
         <section className="viewer-panel">
@@ -456,8 +496,12 @@ function PointCloudViewer({ sourcePoints, targetPoints, deviations, colorMin, co
       window.cancelAnimationFrame(frame)
       observer.disconnect()
       controls.dispose()
+      scene.traverse(disposeThreeObject)
       renderer.dispose()
-      host.removeChild(renderer.domElement)
+      // Micro-frontend hosts can mount/unmount this panel many times. Force the
+      // WebGL context to release GPU memory before the host removes the canvas.
+      renderer.forceContextLoss()
+      renderer.domElement.remove()
     }
   }, [])
 
@@ -469,14 +513,12 @@ function PointCloudViewer({ sourcePoints, targetPoints, deviations, colorMin, co
 
     if (sourceRef.current) {
       scene.remove(sourceRef.current)
-      sourceRef.current.geometry.dispose()
-      ;(sourceRef.current.material as THREE.Material).dispose()
+      disposeThreeObject(sourceRef.current)
       sourceRef.current = null
     }
     if (targetRef.current) {
       scene.remove(targetRef.current)
-      targetRef.current.geometry.dispose()
-      ;(targetRef.current.material as THREE.Material).dispose()
+      disposeThreeObject(targetRef.current)
       targetRef.current = null
     }
 
@@ -530,6 +572,19 @@ function PointCloudViewer({ sourcePoints, targetPoints, deviations, colorMin, co
       {!sourcePoints.length && <div className="empty-state">No result loaded</div>}
     </div>
   )
+}
+
+function disposeThreeObject(object: THREE.Object3D) {
+  const meshLike = object as THREE.Object3D & {
+    geometry?: THREE.BufferGeometry
+    material?: THREE.Material | THREE.Material[]
+  }
+  meshLike.geometry?.dispose()
+  if (Array.isArray(meshLike.material)) {
+    meshLike.material.forEach((material) => material.dispose())
+  } else {
+    meshLike.material?.dispose()
+  }
 }
 
 function makeColoredGeometry(points: number[][], deviations: number[], min: number, max: number) {
@@ -755,6 +810,27 @@ function formatPercent(value: number | null) {
 
 function numberFromUnknown(value: unknown, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function backendConnectionMessage(apiBase: string) {
+  if (apiBase.startsWith('/')) {
+    return `Cannot reach backend gateway at ${apiBase}. Start docker compose so Nginx exposes /api/process-a, then retry.`
+  }
+  return `Cannot reach backend at ${apiBase}. Start the backend or gateway, then retry.`
+}
+
+function resolveDefaultApiBase() {
+  if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE
+  if (typeof window === 'undefined') return '/api/process-a'
+  const { hostname, port } = window.location
+  const isLocalFrontendServer = ['127.0.0.1', 'localhost'].includes(hostname) && port && port !== '80'
+  if (isLocalFrontendServer) {
+    // Vite dev/preview run on their own ports. Point directly at the Docker
+    // gateway on port 80 so both / and /platform.html work without relying on
+    // dev-server-only proxy behavior.
+    return 'http://127.0.0.1/api/process-a'
+  }
+  return '/api/process-a'
 }
 
 function normalizeDeviationStats(value: unknown, deviations: number[]): DeviationStats {

@@ -132,13 +132,13 @@ Common commit types:
 For backend-related changes, run at least:
 
 ```powershell
-python backend/run_output3_tests.py
+python process_apps/arppl/backend/run_output3_tests.py
 ```
 
 For frontend-related changes, run at least:
 
 ```powershell
-cd frontend
+cd process_apps/arppl/frontend
 npm run build
 ```
 
@@ -149,7 +149,7 @@ If a verification step is too slow or requires unavailable data, record exactly 
 On Windows, Git may print a warning like:
 
 ```text
-warning: in the working copy of 'requirements.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'process_apps/arppl/backend/requirements.txt', LF will be replaced by CRLF the next time Git touches it
 ```
 
 This is not an error. It means Git is warning about line-ending conversion in the working tree. The repository includes `.gitattributes` to keep source, config, and documentation files normalized with LF line endings.
@@ -217,8 +217,8 @@ git push -u origin main
 The root `.gitignore` ignores:
 
 - Python caches, virtual environments, and test caches.
-- Frontend `node_modules`, `dist`, temporary folders, and logs.
-- Backend runtime logs and `backend/records/`.
+- Frontend `node_modules`, `dist`, temporary folders, and logs under each process app.
+- Backend runtime logs and `process_apps/*/backend/records/`.
 - Generated `testcase` result folders such as `output`, `output2`, `output3`, and `logs`.
 
 Principle: source code, configs, reproducible scripts, and essential small fixtures belong in Git. Large generated results and rebuildable caches do not.

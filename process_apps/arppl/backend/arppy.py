@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import math
+import os
 import shutil
 import time
 from dataclasses import dataclass
@@ -12,22 +13,34 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
 SAME_THRESHOLD = 1e-6
-RECORD_ROOT = Path(__file__).resolve().parent / "records"
+SERVICE_VERSION = os.getenv("ARPPL_SERVICE_VERSION", "0.1.0")
+PROCESS_ID = os.getenv("ARPPL_PROCESS_ID", "arppl-process-a")
+PROCESS_NAME = os.getenv("ARPPL_PROCESS_NAME", "ARPPL point-to-plane registration")
+REMOTE_APP_NAME = os.getenv("ARPPL_REMOTE_APP_NAME", "arppl_process_app")
+REMOTE_ENTRY_PATH = os.getenv("ARPPL_REMOTE_ENTRY_PATH", "/assets/remoteEntry.js")
+CORS_ORIGIN_REGEX = os.getenv("ARPPL_CORS_ORIGIN_REGEX", r"http://(localhost|127\.0\.0\.1)(:\d+)?")
+RECORD_ROOT = Path(os.getenv("ARPPL_RECORD_ROOT", Path(__file__).resolve().parent / "records"))
 
-app = FastAPI(title="ARPPL Python Backend", version="0.1.0")
+app = FastAPI(title="ARPPL Process Backend", version=SERVICE_VERSION)
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Workflow API is intentionally separated from App API. The workflow router is
+# stateless and only returns calculation data, while the app router can read and
+# write local records that support the standalone interactive UI.
+workflow_router = APIRouter(prefix="/workflow/v1/process-a", tags=["workflow"])
+app_router = APIRouter(tags=["app"])
 
 
 class RegistrationRequest(BaseModel):
@@ -51,6 +64,22 @@ class RegistrationRequest(BaseModel):
     return_points: bool = False
 
 
+class WorkflowRegistrationInput(BaseModel):
+    # Platform-level metadata is optional so this service can still be called by
+    # scripts or tests without a workflow orchestrator. The values are echoed in
+    # the response for traceability; they are never used by the solver.
+    node_id: str | None = Field(None, description="Workflow node instance id supplied by the platform")
+    trace_id: str | None = Field(None, description="Distributed trace/correlation id supplied by the platform")
+    payload: RegistrationRequest = Field(..., description="Pure ARPPL calculation input; no file/session state")
+
+
+class WorkflowRegistrationOutput(BaseModel):
+    node_id: str | None = None
+    trace_id: str | None = None
+    status: str = Field("succeeded", description="succeeded or failed; HTTP 4xx/5xx still represent transport errors")
+    result: RegistrationSummary
+
+
 class RegistrationSummary(BaseModel):
     transform: list[list[float]]
     iterations: int
@@ -71,6 +100,35 @@ class RegistrationSummary(BaseModel):
     output_parameters: dict[str, Any] | None = None
     record_dir: str | None = None
     record_files: dict[str, str] | None = None
+
+
+class ProcessRemoteModule(BaseModel):
+    app_name: str
+    remote_entry: str
+    app_module: str
+    launcher_module: str
+    manifest_module: str
+
+
+class ProcessEndpointManifest(BaseModel):
+    app_base: str
+    workflow_base: str
+    health: str
+    register_files: str
+    workflow_run: str
+    workflow_manifest: str
+
+
+class ProcessManifest(BaseModel):
+    id: str
+    name: str
+    version: str
+    runtime: dict[str, str]
+    capabilities: list[str]
+    micro_frontend: ProcessRemoteModule
+    endpoints: ProcessEndpointManifest
+    contracts: dict[str, Any]
+    standalone: dict[str, str]
 
 
 @dataclass
@@ -1011,7 +1069,75 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/arppl/records")
+@workflow_router.get("/manifest", response_model=ProcessManifest)
+def get_process_manifest() -> ProcessManifest:
+    return ProcessManifest(
+        id=PROCESS_ID,
+        name=PROCESS_NAME,
+        version=SERVICE_VERSION,
+        runtime={
+            "backend": "FastAPI",
+            "frontend": "React micro-frontend",
+            "packaging": "Docker + Vite federation",
+        },
+        capabilities=[
+            "standalone-ui",
+            "workflow-widget",
+            "headless-json-registration",
+            "file-registration-with-records",
+        ],
+        micro_frontend=ProcessRemoteModule(
+            app_name=REMOTE_APP_NAME,
+            remote_entry=REMOTE_ENTRY_PATH,
+            app_module="./ArpplApp",
+            launcher_module="./ProcessLauncher",
+            manifest_module="./processManifest",
+        ),
+        endpoints=ProcessEndpointManifest(
+            app_base="/api/process-a",
+            workflow_base="/api/process-a/workflow",
+            health="/health",
+            register_files="/api/process-a/register-files",
+            workflow_run="/api/process-a/workflow/run",
+            workflow_manifest="/api/process-a/workflow/manifest",
+        ),
+        contracts={
+            "workflow_input": WorkflowRegistrationInput.model_json_schema(),
+            "workflow_output": WorkflowRegistrationOutput.model_json_schema(),
+        },
+        standalone={
+            "app_url": "/",
+            "platform_demo_url": "/platform.html",
+            "remote_entry_url": REMOTE_ENTRY_PATH,
+        },
+    )
+
+
+@workflow_router.post("/run", response_model=WorkflowRegistrationOutput)
+def run_workflow_registration(request: WorkflowRegistrationInput) -> WorkflowRegistrationOutput:
+    # Headless workflow execution: call the existing numerical solver directly
+    # and deliberately avoid record creation, file parsing side effects, local
+    # sessions, or frontend-only visualization persistence.
+    try:
+        result = run_arppl(
+            request.payload.source_points,
+            request.payload.target_points,
+            request.payload.target_normals,
+            source_normals=request.payload.source_normals,
+            params=_params_from_request(request.payload),
+            return_points=request.payload.return_points,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return WorkflowRegistrationOutput(
+        node_id=request.node_id,
+        trace_id=request.trace_id,
+        result=_result_to_summary(result),
+    )
+
+
+@app_router.get("/arppl/records")
+@app_router.get("/app/v1/process-a/records")
 def list_registration_records() -> dict[str, list[dict[str, Any]]]:
     RECORD_ROOT.mkdir(parents=True, exist_ok=True)
     records = []
@@ -1022,7 +1148,8 @@ def list_registration_records() -> dict[str, list[dict[str, Any]]]:
     return {"records": records}
 
 
-@app.delete("/arppl/records")
+@app_router.delete("/arppl/records")
+@app_router.delete("/app/v1/process-a/records")
 def clear_registration_records() -> dict[str, int]:
     RECORD_ROOT.mkdir(parents=True, exist_ok=True)
     deleted = 0
@@ -1033,7 +1160,8 @@ def clear_registration_records() -> dict[str, int]:
     return {"deleted": deleted}
 
 
-@app.get("/arppl/records/{record_id}")
+@app_router.get("/arppl/records/{record_id}")
+@app_router.get("/app/v1/process-a/records/{record_id}")
 def get_registration_record(record_id: str) -> dict[str, Any]:
     if record_id in {".", ".."} or "/" in record_id or "\\" in record_id:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -1046,7 +1174,8 @@ def get_registration_record(record_id: str) -> dict[str, Any]:
     return summary
 
 
-@app.get("/arppl/records/{record_id}/visual")
+@app_router.get("/arppl/records/{record_id}/visual")
+@app_router.get("/app/v1/process-a/records/{record_id}/visual")
 def get_registration_record_visual(record_id: str) -> dict[str, Any]:
     if record_id in {".", ".."} or "/" in record_id or "\\" in record_id:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -1076,7 +1205,8 @@ def get_registration_record_visual(record_id: str) -> dict[str, Any]:
     }
 
 
-@app.post("/arppl/register", response_model=RegistrationSummary)
+@app_router.post("/arppl/register", response_model=RegistrationSummary)
+@app_router.post("/app/v1/process-a/register", response_model=RegistrationSummary)
 def register_points(request: RegistrationRequest) -> RegistrationSummary:
     try:
         result = run_arppl(
@@ -1092,7 +1222,8 @@ def register_points(request: RegistrationRequest) -> RegistrationSummary:
     return _result_to_summary(result)
 
 
-@app.post("/arppl/register-files", response_model=RegistrationSummary)
+@app_router.post("/arppl/register-files", response_model=RegistrationSummary)
+@app_router.post("/app/v1/process-a/register-files", response_model=RegistrationSummary)
 async def register_files(
     source: UploadFile = File(...),
     target: UploadFile = File(...),
@@ -1231,3 +1362,7 @@ async def register_files(
     summary.record_dir = record_dir
     summary.record_files = record_files
     return summary
+
+
+app.include_router(workflow_router)
+app.include_router(app_router)

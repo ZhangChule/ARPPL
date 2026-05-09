@@ -1,0 +1,127 @@
+# ARPPL 工艺 App
+
+`process_apps/arppl` 是一个可独立发布的完整工艺 App。它同时提供：
+
+- 独立 React + Three.js 界面。
+- FastAPI 后端微服务。
+- Vite federation 微前端模块。
+- Docker Compose 独立部署编排。
+- 工作流平台的 manifest 与 headless run API。
+
+## 目录
+
+```text
+process_apps/arppl/
+  backend/              FastAPI 服务、ARPPL API、合同测试
+  frontend/             React 独立界面、平台示例、微前端暴露模块
+  docker/               该工艺 App 的 Dockerfile、Nginx、Compose
+  .dockerignore         该工艺 App 的 Docker 构建忽略规则
+  README.md             当前说明
+```
+
+## 后端边界
+
+核心数值计算逻辑位于 `backend/arppy.py` 的 `run_arppl` 及其依赖函数中。平台适配只允许发生在 API 契约、manifest、文件输入输出、记录管理和容器部署层，不应修改 NumPy 数学模型、`pykdtree` 近邻查询或 ARPPL 求解过程。
+
+后端公开两类 API：
+
+- App API: `/api/process-a/*`，给独立 UI 使用，可保存本地实验记录。
+- Workflow API: `/api/process-a/workflow/*`，给工作流平台使用，默认无状态。
+
+关键入口：
+
+```text
+GET  /api/process-a/workflow/manifest
+POST /api/process-a/workflow/run
+POST /api/process-a/register-files
+GET  /api/process-a/records
+```
+
+## 微前端
+
+Vite federation remote:
+
+```text
+app name: arppl_process_app
+entry:    /assets/remoteEntry.js
+```
+
+暴露模块：
+
+```text
+arppl_process_app/ArpplApp
+arppl_process_app/ProcessLauncher
+arppl_process_app/processManifest
+```
+
+`ArpplApp` 是完整工艺界面，支持 `standalone` 与 `workflow` 两种模式。`ProcessLauncher` 是平台侧推荐加载的弹窗式入口，适合节点配置、参数确认和交互式运行。
+
+## 独立部署
+
+在仓库根目录执行：
+
+```powershell
+docker compose -f process_apps/arppl/docker/compose.yml up -d --build
+```
+
+如果本机已经有镜像、但 Docker Hub 暂时不可访问：
+
+```powershell
+docker compose -f process_apps/arppl/docker/compose.yml up -d --no-build
+```
+
+访问：
+
+```text
+http://localhost/                                  独立 App
+http://localhost/platform.html                     平台调用示例
+http://localhost/assets/remoteEntry.js             微前端入口
+http://localhost/health                            后端健康检查
+http://localhost/api/process-a/workflow/manifest   平台发现契约
+```
+
+停止：
+
+```powershell
+docker compose -f process_apps/arppl/docker/compose.yml down
+```
+
+## 本地开发
+
+终端 1，后端：
+
+```powershell
+cd process_apps/arppl
+python -m uvicorn backend.arppy:app --host 127.0.0.1 --port 8000
+```
+
+终端 2，前端：
+
+```powershell
+cd process_apps/arppl/frontend
+$env:VITE_API_BASE="http://127.0.0.1:8000/app/v1/process-a"
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+访问：
+
+```text
+http://127.0.0.1:5173/
+```
+
+## 测试
+
+后端合同测试会使用仓库根目录下的真实 PLY 数据：
+
+```powershell
+cd process_apps/arppl
+python -m unittest backend.test_process_contract -v
+```
+
+前端验证：
+
+```powershell
+cd process_apps/arppl/frontend
+npm run lint
+npm run build
+```
