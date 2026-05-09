@@ -80,8 +80,23 @@ class WorkflowRegistrationOutput(BaseModel):
     result: RegistrationSummary
 
 
+class PoseSummary(BaseModel):
+    translation_xyz: list[float] = Field(..., description="Transform translation [x, y, z]")
+    angles_xyz_degrees: list[float] = Field(
+        ...,
+        description="Euler angles [roll_x, pitch_y, yaw_z] in degrees, using R = Rz(yaw) * Ry(pitch) * Rx(roll)",
+    )
+    angles_xyz_radians: list[float] = Field(
+        ...,
+        description="Euler angles [roll_x, pitch_y, yaw_z] in radians, using R = Rz(yaw) * Ry(pitch) * Rx(roll)",
+    )
+    rotation_matrix: list[list[float]]
+    convention: str = "Rz(yaw_z) * Ry(pitch_y) * Rx(roll_x)"
+
+
 class RegistrationSummary(BaseModel):
     transform: list[list[float]]
+    pose: PoseSummary
     iterations: int
     final_energy: float
     out_of_tolerance: float
@@ -116,6 +131,7 @@ class ProcessEndpointManifest(BaseModel):
     health: str
     register_files: str
     workflow_run: str
+    workflow_run_files: str
     workflow_manifest: str
 
 
@@ -674,6 +690,7 @@ def _vec_to_log_block(vec: np.ndarray) -> np.ndarray:
 def _result_to_summary(result: ARPPLResult) -> RegistrationSummary:
     return RegistrationSummary(
         transform=result.transform.tolist(),
+        pose=_pose_from_transform(result.transform),
         iterations=result.iterations,
         final_energy=result.final_energy,
         out_of_tolerance=result.out_of_tolerance,
@@ -684,6 +701,28 @@ def _result_to_summary(result: ARPPLResult) -> RegistrationSummary:
         history=result.history,
         transformed_source_points=None if result.transformed_points is None else result.transformed_points.tolist(),
         transformed_source_normals=None if result.transformed_normals is None else result.transformed_normals.tolist(),
+    )
+
+
+def _pose_from_transform(transform: np.ndarray) -> PoseSummary:
+    matrix = np.asarray(transform, dtype=float)
+    rotation = matrix[:3, :3]
+    translation = matrix[:3, 3]
+    sy = math.hypot(float(rotation[0, 0]), float(rotation[1, 0]))
+    if sy > 1e-9:
+        roll_x = math.atan2(float(rotation[2, 1]), float(rotation[2, 2]))
+        pitch_y = math.atan2(float(-rotation[2, 0]), sy)
+        yaw_z = math.atan2(float(rotation[1, 0]), float(rotation[0, 0]))
+    else:
+        roll_x = math.atan2(float(-rotation[1, 2]), float(rotation[1, 1]))
+        pitch_y = math.atan2(float(-rotation[2, 0]), sy)
+        yaw_z = 0.0
+    angles = [roll_x, pitch_y, yaw_z]
+    return PoseSummary(
+        translation_xyz=[float(value) for value in translation],
+        angles_xyz_degrees=[float(math.degrees(value)) for value in angles],
+        angles_xyz_radians=[float(value) for value in angles],
+        rotation_matrix=rotation.tolist(),
     )
 
 
@@ -1099,6 +1138,7 @@ def get_process_manifest() -> ProcessManifest:
             health="/health",
             register_files="/api/process-a/register-files",
             workflow_run="/api/process-a/workflow/run",
+            workflow_run_files="/api/process-a/workflow/run-files",
             workflow_manifest="/api/process-a/workflow/manifest",
         ),
         contracts={
@@ -1107,7 +1147,6 @@ def get_process_manifest() -> ProcessManifest:
         },
         standalone={
             "app_url": "/",
-            "platform_demo_url": "/platform.html",
             "remote_entry_url": REMOTE_ENTRY_PATH,
         },
     )
@@ -1133,6 +1172,92 @@ def run_workflow_registration(request: WorkflowRegistrationInput) -> WorkflowReg
         node_id=request.node_id,
         trace_id=request.trace_id,
         result=_result_to_summary(result),
+    )
+
+
+@workflow_router.post("/run-files", response_model=WorkflowRegistrationOutput)
+async def run_workflow_registration_files(
+    source: UploadFile = File(...),
+    target: UploadFile = File(...),
+    node_id: str | None = Form(None),
+    trace_id: str | None = Form(None),
+    u: float = Form(0.001),
+    alpha: str = Form("-inf"),
+    value_n: float | None = Form(-0.2),
+    value_p: float | None = Form(20.0),
+    u_in_original_units: bool = Form(False),
+    max_outer: int = Form(30),
+    max_inner: int = Form(6),
+    stop: float = Form(1e-5),
+    use_anderson: bool = Form(True),
+    registration_sample_size: int = Form(0),
+) -> WorkflowRegistrationOutput:
+    # File-based workflow execution mirrors the standalone file parser but stays
+    # stateless: no experiment records and no visualization artifacts.
+    try:
+        source_filename = source.filename or "source.ply"
+        target_filename = target.filename or "target.ply"
+        parsed_alpha = _parse_alpha(alpha)
+        source_points, source_normals, _source_colors = read_point_cloud_bytes(
+            source_filename, await source.read()
+        )
+        target_points, target_normals, _target_colors = read_point_cloud_bytes(
+            target_filename, await target.read()
+        )
+        if target_normals is None:
+            raise ValueError("Target point cloud must contain normals for point-to-plane ARPPL")
+        source_reg_points, source_reg_normals = _sample_point_cloud(
+            source_points,
+            source_normals,
+            registration_sample_size,
+            seed=20260425,
+        )
+        target_reg_points, target_reg_normals = _sample_point_cloud(
+            target_points,
+            target_normals,
+            registration_sample_size,
+            seed=20260426,
+        )
+        if target_reg_normals is None:
+            raise ValueError("Target point cloud must contain normals for point-to-plane ARPPL")
+        result = run_arppl(
+            source_reg_points,
+            target_reg_points,
+            target_reg_normals,
+            source_normals=source_reg_normals,
+            params=ARPPLParameters(
+                u=u,
+                alpha=parsed_alpha,
+                value_n=-math.inf if value_n is None else value_n,
+                value_p=math.inf if value_p is None else value_p,
+                u_in_original_units=u_in_original_units,
+                max_outer=max_outer,
+                max_inner=max_inner,
+                stop=stop,
+                use_anderson=use_anderson,
+            ),
+            return_points=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    summary = _result_to_summary(result)
+    summary.input_parameters = {
+        "source_file": source_filename,
+        "target_file": target_filename,
+        "source_points": int(len(source_points)),
+        "target_points": int(len(target_points)),
+        "registration_sample_size": int(registration_sample_size),
+        "u": float(u),
+        "alpha": alpha,
+        "value_n": None if value_n is None else float(value_n),
+        "value_p": None if value_p is None else float(value_p),
+        "max_outer": int(max_outer),
+        "max_inner": int(max_inner),
+    }
+    return WorkflowRegistrationOutput(
+        node_id=node_id,
+        trace_id=trace_id,
+        result=summary,
     )
 
 

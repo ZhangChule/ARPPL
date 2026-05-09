@@ -14,6 +14,13 @@ type DeviationStats = {
 
 type RegistrationResponse = {
   transform: number[][]
+  pose: {
+    translation_xyz: number[]
+    angles_xyz_degrees: number[]
+    angles_xyz_radians: number[]
+    rotation_matrix: number[][]
+    convention: string
+  }
   iterations: number
   final_energy: number
   out_of_tolerance: number
@@ -186,6 +193,13 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
       setSelectedRecord(data)
       setResult({
         transform: [],
+        pose: {
+          translation_xyz: [],
+          angles_xyz_degrees: [],
+          angles_xyz_radians: [],
+          rotation_matrix: [],
+          convention: 'Rz(yaw_z) * Ry(pitch_y) * Rx(roll_x)',
+        },
         iterations: numberFromUnknown(data.output_parameters.iterations, 0),
         final_energy: numberFromUnknown(data.output_parameters.final_energy, 0),
         out_of_tolerance: data.llotp ?? numberFromUnknown(data.output_parameters.llotp, 0),
@@ -826,8 +840,7 @@ function resolveDefaultApiBase() {
   const isLocalFrontendServer = ['127.0.0.1', 'localhost'].includes(hostname) && port && port !== '80'
   if (isLocalFrontendServer) {
     // Vite dev/preview run on their own ports. Point directly at the Docker
-    // gateway on port 80 so both / and /platform.html work without relying on
-    // dev-server-only proxy behavior.
+    // gateway on port 80 without relying on dev-server-only proxy behavior.
     return 'http://127.0.0.1/api/process-a'
   }
   return '/api/process-a'

@@ -1,0 +1,11 @@
+name: workflow_platform
+
+services:
+  workflow-platform:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: workflow-platform:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"

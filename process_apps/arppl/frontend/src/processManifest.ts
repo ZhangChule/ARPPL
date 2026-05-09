@@ -15,12 +15,12 @@ export type ProcessAppManifest = {
     health: string
     registerFiles: string
     workflowRun: string
+    workflowRunFiles: string
     workflowManifest: string
   }
   capabilities: string[]
   standalone: {
     appUrl: string
-    platformDemoUrl: string
   }
 }
 
@@ -41,6 +41,7 @@ export const processManifest: ProcessAppManifest = {
     health: '/health',
     registerFiles: '/api/process-a/register-files',
     workflowRun: '/api/process-a/workflow/run',
+    workflowRunFiles: '/api/process-a/workflow/run-files',
     workflowManifest: '/api/process-a/workflow/manifest',
   },
   capabilities: [
@@ -51,7 +52,6 @@ export const processManifest: ProcessAppManifest = {
   ],
   standalone: {
     appUrl: '/',
-    platformDemoUrl: '/platform.html',
   },
 }
 

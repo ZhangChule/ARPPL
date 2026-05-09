@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import federation from '@originjs/vite-plugin-federation'
-import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -27,12 +26,6 @@ export default defineConfig({
     target: 'esnext',
     modulePreload: false,
     cssCodeSplit: false,
-    rollupOptions: {
-      input: {
-        app: fileURLToPath(new URL('./index.html', import.meta.url)),
-        platform: fileURLToPath(new URL('./platform.html', import.meta.url)),
-      },
-    },
   },
   server: {
     proxy: {

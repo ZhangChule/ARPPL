@@ -38,7 +38,9 @@ class ProcessContractTests(unittest.TestCase):
         self.assertEqual(body["micro_frontend"]["app_module"], "./ArpplApp")
         self.assertEqual(body["micro_frontend"]["launcher_module"], "./ProcessLauncher")
         self.assertEqual(body["endpoints"]["workflow_run"], "/api/process-a/workflow/run")
+        self.assertEqual(body["endpoints"]["workflow_run_files"], "/api/process-a/workflow/run-files")
         self.assertIn("workflow_input", body["contracts"])
+        self.assertNotIn("platform_demo_url", body["standalone"])
 
     def test_headless_workflow_api_runs_without_records(self) -> None:
         response = self.client.post(
@@ -64,6 +66,9 @@ class ProcessContractTests(unittest.TestCase):
         self.assertEqual(body["status"], "succeeded")
         self.assertGreaterEqual(body["result"]["iterations"], 1)
         self.assertIsNone(body["result"]["record_dir"])
+        self.assertIn("pose", body["result"])
+        self.assertEqual(len(body["result"]["pose"]["translation_xyz"]), 3)
+        self.assertEqual(len(body["result"]["pose"]["angles_xyz_degrees"]), 3)
 
     def test_app_file_api_runs_cross_inner_final_case(self) -> None:
         source_path = CASE_DIR / "cross_inner_final_source.ply"
@@ -95,6 +100,8 @@ class ProcessContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text[:2000])
         body = response.json()
         self.assertGreaterEqual(body["iterations"], 1)
+        self.assertEqual(len(body["pose"]["translation_xyz"]), 3)
+        self.assertEqual(len(body["pose"]["angles_xyz_degrees"]), 3)
         self.assertGreater(body["visual_sample_size"], 0)
         self.assertEqual(len(body["transformed_source_points"]), body["visual_sample_size"])
         self.assertEqual(len(body["signed_deviations"]), body["visual_sample_size"])
@@ -105,6 +112,40 @@ class ProcessContractTests(unittest.TestCase):
         records = self.client.get("/app/v1/process-a/records")
         self.assertEqual(records.status_code, 200, records.text)
         self.assertGreaterEqual(len(records.json()["records"]), 1)
+
+    def test_workflow_file_api_runs_cross_inner_final_case_without_records(self) -> None:
+        source_path = CASE_DIR / "cross_inner_final_source.ply"
+        target_path = CASE_DIR / "cross_inner_final_target.ply"
+
+        with source_path.open("rb") as source_file, target_path.open("rb") as target_file:
+            response = self.client.post(
+                "/workflow/v1/process-a/run-files",
+                data={
+                    "node_id": "file-node",
+                    "trace_id": "trace-files",
+                    "u": "0.001",
+                    "alpha": "-inf",
+                    "value_n": "-0.2",
+                    "value_p": "20",
+                    "max_outer": "2",
+                    "max_inner": "2",
+                    "stop": "0.00001",
+                    "use_anderson": "true",
+                    "registration_sample_size": "600",
+                },
+                files={
+                    "source": (source_path.name, source_file, "application/octet-stream"),
+                    "target": (target_path.name, target_file, "application/octet-stream"),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text[:2000])
+        body = response.json()
+        self.assertEqual(body["node_id"], "file-node")
+        self.assertEqual(body["status"], "succeeded")
+        self.assertEqual(len(body["result"]["pose"]["translation_xyz"]), 3)
+        self.assertEqual(len(body["result"]["pose"]["angles_xyz_degrees"]), 3)
+        self.assertIsNone(body["result"]["record_dir"])
 
 
 if __name__ == "__main__":
