@@ -85,6 +85,7 @@ type ViewerProps = {
   colorMax: number
   pointSize: number
   showTarget: boolean
+  emptyLabel: string
 }
 
 const DEFAULT_API_BASE = resolveDefaultApiBase()
@@ -99,8 +100,151 @@ const ALPHA_TICKS = [
   { value: 2, label: 'L2' },
 ]
 
+const APP_COPY = {
+  en: {
+    alphaField: `${ALPHA_SYMBOL} loss`,
+    alphaLabels: {
+      cauchy: `Cauchy / Lorentzian loss (${ALPHA_SYMBOL}=1)`,
+      charbonnier: `Charbonnier loss (${ALPHA_SYMBOL}=0)`,
+      general: (value: number) => `General robust loss (${ALPHA_SYMBOL}=${value.toFixed(1)})`,
+      geman: `Geman-McClure loss (${ALPHA_SYMBOL}=-2)`,
+      l2: `L2 loss (${ALPHA_SYMBOL}=2)`,
+      welsch: `Welsch / Leclerc loss (${ALPHA_SYMBOL}->-inf)`,
+    },
+    awaitingData: 'Awaiting data',
+    backend: 'Backend',
+    backendConnectionGateway: (apiBase: string) =>
+      `Cannot reach backend gateway at ${apiBase}. Start docker compose so Nginx exposes /api/process-a, then retry.`,
+    backendConnectionRemote: (apiBase: string) => `Cannot reach backend at ${apiBase}. Start the backend or gateway, then retry.`,
+    backendStatus: {
+      checking: 'checking',
+      offline: 'offline',
+      online: 'online',
+    },
+    chooseFile: 'Choose file',
+    clear: 'Clear',
+    clearRecordsConfirm: 'Clear all experiment records?',
+    clearRecordsError: 'Could not clear experiment records',
+    colorMax: 'Color max',
+    colorMin: 'Color min',
+    coloredSourcePoints: (count: string) => `${count} colored source points`,
+    deviationMap: 'Deviation Map',
+    detail: 'Detail',
+    emptyViewer: 'No result loaded',
+    experiments: 'Experiments',
+    files: 'Files',
+    input: 'Input',
+    iterations: 'Iterations',
+    language: 'Language',
+    loadingPreview: 'Loading preview...',
+    lowerTol: 'Lower tol',
+    noRecords: 'No experiment record yet.',
+    outerIter: 'Outer iter',
+    output: 'Output',
+    pointSize: 'Point size',
+    pointToPlane: 'Point-to-plane registration',
+    previewError: 'Could not preview PLY file',
+    previewSourcePoints: (count: string) => `${count} preview source points`,
+    recordVisualError: 'Could not load record visual data',
+    recordFolder: 'Record folder',
+    refresh: 'Refresh',
+    regPts: 'Reg pts (0=full)',
+    registrationFailed: 'Registration failed',
+    rmse: 'RMSE',
+    runRegistration: 'Run registration',
+    running: 'Running...',
+    sourcePly: 'Source PLY',
+    status: {
+      done: 'done',
+      error: 'error',
+      loading: 'loading',
+      ready: 'ready',
+      running: 'running',
+    },
+    target: 'Target',
+    targetPly: 'Target PLY',
+    time: 'Time',
+    upperTol: 'Upper tol',
+    view: 'View',
+    viewing: 'Viewing',
+    visualPts: 'Visual pts',
+  },
+  zh: {
+    alphaField: `${ALPHA_SYMBOL} 损失函数`,
+    alphaLabels: {
+      cauchy: `Cauchy / Lorentzian 损失 (${ALPHA_SYMBOL}=1)`,
+      charbonnier: `Charbonnier 损失 (${ALPHA_SYMBOL}=0)`,
+      general: (value: number) => `通用鲁棒损失 (${ALPHA_SYMBOL}=${value.toFixed(1)})`,
+      geman: `Geman-McClure 损失 (${ALPHA_SYMBOL}=-2)`,
+      l2: `L2 损失 (${ALPHA_SYMBOL}=2)`,
+      welsch: `Welsch / Leclerc 损失 (${ALPHA_SYMBOL}->-inf)`,
+    },
+    awaitingData: '等待数据',
+    backend: '后端',
+    backendConnectionGateway: (apiBase: string) =>
+      `无法连接后端网关 ${apiBase}。请先启动 docker compose，确保 Nginx 暴露 /api/process-a 后重试。`,
+    backendConnectionRemote: (apiBase: string) => `无法连接后端 ${apiBase}。请启动后端或网关后重试。`,
+    backendStatus: {
+      checking: '检查中',
+      offline: '离线',
+      online: '在线',
+    },
+    chooseFile: '选择文件',
+    clear: '清空',
+    clearRecordsConfirm: '确认清空全部实验记录？',
+    clearRecordsError: '无法清空实验记录',
+    colorMax: '颜色上限',
+    colorMin: '颜色下限',
+    coloredSourcePoints: (count: string) => `${count} 个着色源点`,
+    deviationMap: '偏差图',
+    detail: '详情',
+    emptyViewer: '暂无结果',
+    experiments: '实验记录',
+    files: '文件',
+    input: '输入',
+    iterations: '迭代次数',
+    language: '语言',
+    loadingPreview: '正在加载预览...',
+    lowerTol: 'Lower tol',
+    noRecords: '暂无实验记录。',
+    outerIter: '外层迭代',
+    output: '输出',
+    pointSize: '点尺寸',
+    pointToPlane: '点到平面配准',
+    previewError: '无法预览 PLY 文件',
+    previewSourcePoints: (count: string) => `${count} 个预览源点`,
+    recordVisualError: '无法加载记录可视化数据',
+    recordFolder: '记录目录',
+    refresh: '刷新',
+    regPts: '配准点数 (0=全采样)',
+    registrationFailed: '配准失败',
+    rmse: 'RMSE',
+    runRegistration: '运行配准',
+    running: '正在运行...',
+    sourcePly: '源 PLY',
+    status: {
+      done: '完成',
+      error: '错误',
+      loading: '加载中',
+      ready: '就绪',
+      running: '运行中',
+    },
+    target: '目标',
+    targetPly: '目标 PLY',
+    time: '时间',
+    upperTol: 'Upper tol',
+    view: '查看',
+    viewing: '查看中',
+    visualPts: '可视化点数',
+  },
+} as const
+
+type Language = keyof typeof APP_COPY
+type AppCopy = (typeof APP_COPY)[Language]
+
 export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BASE }: ArpplAppProps) {
   const normalizedApiBase = apiBase.replace(/\/$/, '')
+  const [language, setLanguage] = useState<Language>(() => resolveInitialLanguage())
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [targetFile, setTargetFile] = useState<File | null>(null)
   const [u, setU] = useState('0.001')
@@ -122,6 +266,7 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
   const [status, setStatus] = useState('ready')
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const [error, setError] = useState('')
+  const copy = APP_COPY[language]
 
   const canRun = sourceFile !== null && targetFile !== null && status !== 'running' && status !== 'loading'
 
@@ -140,6 +285,13 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
       // The comparison table is auxiliary; keep the main registration UI usable.
     }
   }, [normalizedApiBase])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('arppl-language', language)
+      window.document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
+    }
+  }, [language])
 
   useEffect(() => {
     if (mode !== 'standalone') return
@@ -161,7 +313,7 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
   }, [mode, normalizedApiBase])
 
   async function clearRecords() {
-    if (!window.confirm('Clear all experiment records?')) return
+    if (!window.confirm(copy.clearRecordsConfirm)) return
     setError('')
     try {
       const response = await fetch(`${normalizedApiBase}/records`, { method: 'DELETE' })
@@ -174,7 +326,7 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
       setResult(null)
       await loadRecords()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not clear experiment records')
+      setError(caught instanceof Error ? caught.message : copy.clearRecordsError)
     }
   }
 
@@ -222,7 +374,7 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
       setStatus('done')
     } catch (caught) {
       setStatus('error')
-      setError(caught instanceof Error ? caught.message : 'Could not load record visual data')
+      setError(caught instanceof Error ? caught.message : copy.recordVisualError)
     }
   }
 
@@ -252,7 +404,7 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
       setStatus('ready')
     } catch (caught) {
       setStatus('error')
-      setError(caught instanceof Error ? caught.message : 'Could not preview PLY file')
+      setError(caught instanceof Error ? caught.message : copy.previewError)
     }
   }
 
@@ -307,10 +459,10 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
       })
     } catch (caught) {
       const message = caught instanceof TypeError && caught.message === 'Failed to fetch'
-        ? backendConnectionMessage(normalizedApiBase)
+        ? backendConnectionMessage(normalizedApiBase, copy)
         : caught instanceof Error
           ? caught.message
-          : 'Registration failed'
+          : copy.registrationFailed
       setError(message)
       setStatus('error')
     }
@@ -331,21 +483,32 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
           <div className="brand-row">
             <div>
               <h1>ARPPL</h1>
-              <p>Point-to-plane registration</p>
-              <small className={`backend-indicator backend-${backendStatus}`}>Backend: {backendStatus}</small>
+              <p>{copy.pointToPlane}</p>
+              <small className={`backend-indicator backend-${backendStatus}`}>
+                {copy.backend}: {copy.backendStatus[backendStatus]}
+              </small>
             </div>
-            <StatusBadge status={status} />
+            <div className="brand-actions">
+              <label className="language-switch">
+                <span>{copy.language}</span>
+                <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <StatusBadge status={status} labels={copy.status} />
+            </div>
           </div>
 
           <div className="field-stack">
-            <FileField label="Source PLY" file={sourceFile} onChange={handleSourceFile} />
-            <FileField label="Target PLY" file={targetFile} onChange={handleTargetFile} />
+            <FileField label={copy.sourcePly} file={sourceFile} chooseLabel={copy.chooseFile} onChange={handleSourceFile} />
+            <FileField label={copy.targetPly} file={targetFile} chooseLabel={copy.chooseFile} onChange={handleTargetFile} />
           </div>
 
           <div className="param-grid">
             <NumberField label="u" value={u} onChange={setU} />
             <label className="alpha-field">
-              <span>{ALPHA_SYMBOL} loss</span>
+              <span>{copy.alphaField}</span>
               <input
                 type="range"
                 min={ALPHA_MIN}
@@ -365,29 +528,30 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
                   </span>
                 ))}
               </div>
-              <strong>{alphaLabel(alphaValue)}</strong>
+              <strong>{alphaLabel(alphaValue, copy)}</strong>
             </label>
-            <NumberField label="Lower tol" value={valueN} onChange={setValueN} />
-            <NumberField label="Upper tol" value={valueP} onChange={setValueP} />
-            <NumberField label="Outer iter" value={maxOuter} onChange={setMaxOuter} />
-            <NumberField label="Reg pts (0=full)" value={registrationSampleSize} onChange={setRegistrationSampleSize} />
-            <NumberField label="Visual pts" value={visualSampleSize} onChange={setVisualSampleSize} />
+            <NumberField label={copy.lowerTol} value={valueN} onChange={setValueN} />
+            <NumberField label={copy.upperTol} value={valueP} onChange={setValueP} />
+            <NumberField label={copy.outerIter} value={maxOuter} onChange={setMaxOuter} />
+            <NumberField label={copy.regPts} value={registrationSampleSize} onChange={setRegistrationSampleSize} />
+            <NumberField label={copy.visualPts} value={visualSampleSize} onChange={setVisualSampleSize} />
           </div>
 
           <button className="run-button" type="button" disabled={!canRun} onClick={runRegistration}>
-            {status === 'running' ? 'Running...' : status === 'loading' ? 'Loading preview...' : 'Run registration'}
+            {status === 'running' ? copy.running : status === 'loading' ? copy.loadingPreview : copy.runRegistration}
           </button>
 
           {error && <div className="error-box">{error}</div>}
 
           <section className="metric-panel">
             <Metric label="LLOTP" value={result ? `${(result.out_of_tolerance * 100).toFixed(2)}%` : '--'} />
-            <Metric label="Iterations" value={result ? String(result.iterations) : '--'} />
-            <Metric label="Time" value={result ? `${result.elapsed_seconds.toFixed(1)}s` : '--'} />
+            <Metric label={copy.iterations} value={result ? String(result.iterations) : '--'} />
+            <Metric label={copy.time} value={result ? `${result.elapsed_seconds.toFixed(1)}s` : '--'} />
             <Metric label="RMSE" value={result ? formatNumber(result.deviation_stats.rmse) : '--'} />
           </section>
           {mode === 'standalone' && (
             <ExperimentTable
+              copy={copy}
               records={records}
               selectedRecord={selectedRecord}
               onSelect={viewRecord}
@@ -400,18 +564,18 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
         <section className="viewer-panel">
           <header className="viewer-toolbar">
             <div>
-              <h2>Deviation Map</h2>
+              <h2>{copy.deviationMap}</h2>
               <p>
                 {result
-                  ? `${result.visual_sample_size.toLocaleString()} colored source points`
+                  ? copy.coloredSourcePoints(result.visual_sample_size.toLocaleString())
                   : previewSourcePoints.length
-                    ? `${previewSourcePoints.length.toLocaleString()} preview source points`
-                    : 'Awaiting data'}
+                    ? copy.previewSourcePoints(previewSourcePoints.length.toLocaleString())
+                    : copy.awaitingData}
               </p>
             </div>
             <label className="switch">
               <input type="checkbox" checked={showTarget} onChange={(event) => setShowTarget(event.target.checked)} />
-              <span>Target</span>
+              <span>{copy.target}</span>
             </label>
           </header>
 
@@ -423,18 +587,19 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
             colorMax={Number.isFinite(colorBounds.max) ? colorBounds.max : 1}
             pointSize={pointSize}
             showTarget={showTarget}
+            emptyLabel={copy.emptyViewer}
           />
 
           <footer className="color-controls">
-            <NumberField label="Color min" value={colorMin} onChange={setColorMin} />
+            <NumberField label={copy.colorMin} value={colorMin} onChange={setColorMin} />
             <div className="legend">
               <span>{colorMin}</span>
               <div className="legend-ramp" style={legendRampStyle(colorBounds.min, colorBounds.max)} />
               <span>{colorMax}</span>
             </div>
-            <NumberField label="Color max" value={colorMax} onChange={setColorMax} />
+            <NumberField label={copy.colorMax} value={colorMax} onChange={setColorMax} />
             <label className="range-field">
-              <span>Point size</span>
+              <span>{copy.pointSize}</span>
               <input
                 type="range"
                 min="1"
@@ -451,7 +616,16 @@ export function App({ mode = 'standalone', initialData, apiBase = DEFAULT_API_BA
   )
 }
 
-function PointCloudViewer({ sourcePoints, targetPoints, deviations, colorMin, colorMax, pointSize, showTarget }: ViewerProps) {
+function PointCloudViewer({
+  sourcePoints,
+  targetPoints,
+  deviations,
+  colorMin,
+  colorMax,
+  pointSize,
+  showTarget,
+  emptyLabel,
+}: ViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -583,7 +757,7 @@ function PointCloudViewer({ sourcePoints, targetPoints, deviations, colorMin, co
 
   return (
     <div className="viewer-host" ref={hostRef}>
-      {!sourcePoints.length && <div className="empty-state">No result loaded</div>}
+      {!sourcePoints.length && <div className="empty-state">{emptyLabel}</div>}
     </div>
   )
 }
@@ -668,7 +842,17 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function FileField({ label, file, onChange }: { label: string; file: File | null; onChange: (file: File | null) => void }) {
+function FileField({
+  label,
+  file,
+  chooseLabel,
+  onChange,
+}: {
+  label: string
+  file: File | null
+  chooseLabel: string
+  onChange: (file: File | null) => void
+}) {
   return (
     <label className="file-field">
       <span>{label}</span>
@@ -677,7 +861,7 @@ function FileField({ label, file, onChange }: { label: string; file: File | null
         accept=".ply,.obj"
         onChange={(event) => onChange(event.target.files?.[0] ?? null)}
       />
-      <strong>{file ? file.name : 'Choose file'}</strong>
+      <strong>{file ? file.name : chooseLabel}</strong>
     </label>
   )
 }
@@ -701,12 +885,14 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function ExperimentTable({
+  copy,
   records,
   selectedRecord,
   onSelect,
   onRefresh,
   onClear,
 }: {
+  copy: AppCopy
   records: ExperimentRecord[]
   selectedRecord: ExperimentRecord | null
   onSelect: (record: ExperimentRecord) => Promise<void>
@@ -718,13 +904,13 @@ function ExperimentTable({
   return (
     <section className="experiment-panel">
       <div className="experiment-head">
-        <h3>Experiments</h3>
+        <h3>{copy.experiments}</h3>
         <div className="experiment-actions">
           <button type="button" onClick={() => void onRefresh()}>
-            Refresh
+            {copy.refresh}
           </button>
           <button className="clear-button" type="button" disabled={!records.length} onClick={() => void onClear()}>
-            Clear
+            {copy.clear}
           </button>
         </div>
       </div>
@@ -736,8 +922,8 @@ function ExperimentTable({
               <tr>
                 <th>loss_name</th>
                 <th>LLOTP</th>
-                <th>Time</th>
-                <th>Detail</th>
+                <th>{copy.time}</th>
+                <th>{copy.detail}</th>
               </tr>
             </thead>
             <tbody>
@@ -750,7 +936,7 @@ function ExperimentTable({
                     <td>{formatSeconds(record.elapsed_seconds)}</td>
                     <td>
                       <button className="detail-button" type="button" onClick={() => void onSelect(record)}>
-                        {isSelected ? 'Viewing' : 'View'}
+                        {isSelected ? copy.viewing : copy.view}
                       </button>
                     </td>
                   </tr>
@@ -760,18 +946,18 @@ function ExperimentTable({
           </table>
         </div>
       ) : (
-        <p className="record-empty">No experiment record yet.</p>
+        <p className="record-empty">{copy.noRecords}</p>
       )}
 
       {detailRecord && (
         <div className="record-content experiment-detail">
           <div className="record-path">
-            <span>Record folder</span>
+            <span>{copy.recordFolder}</span>
             <strong title={detailRecord.record_dir}>{detailRecord.record_dir}</strong>
           </div>
-          <RecordTable title="Input" rows={compactEntries(detailRecord.input_parameters)} />
-          <RecordTable title="Output" rows={compactEntries(detailRecord.output_parameters)} />
-          <RecordTable title="Files" rows={Object.entries(detailRecord.record_files ?? {})} />
+          <RecordTable title={copy.input} rows={compactEntries(detailRecord.input_parameters)} />
+          <RecordTable title={copy.output} rows={compactEntries(detailRecord.output_parameters)} />
+          <RecordTable title={copy.files} rows={Object.entries(detailRecord.record_files ?? {})} />
         </div>
       )}
     </section>
@@ -803,8 +989,8 @@ function formatRecordValue(value: unknown) {
   return String(value)
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return <span className={`status-badge status-${status}`}>{status}</span>
+function StatusBadge({ status, labels }: { status: string; labels: Readonly<Record<string, string>> }) {
+  return <span className={`status-badge status-${status}`}>{labels[status] ?? status}</span>
 }
 
 function formatNumber(value: number) {
@@ -826,11 +1012,11 @@ function numberFromUnknown(value: unknown, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
-function backendConnectionMessage(apiBase: string) {
+function backendConnectionMessage(apiBase: string, copy: AppCopy) {
   if (apiBase.startsWith('/')) {
-    return `Cannot reach backend gateway at ${apiBase}. Start docker compose so Nginx exposes /api/process-a, then retry.`
+    return copy.backendConnectionGateway(apiBase)
   }
-  return `Cannot reach backend at ${apiBase}. Start the backend or gateway, then retry.`
+  return copy.backendConnectionRemote(apiBase)
 }
 
 function resolveDefaultApiBase() {
@@ -844,6 +1030,13 @@ function resolveDefaultApiBase() {
     return 'http://127.0.0.1/api/process-a'
   }
   return '/api/process-a'
+}
+
+function resolveInitialLanguage(): Language {
+  if (typeof window === 'undefined') return 'en'
+  const stored = window.localStorage.getItem('arppl-language')
+  if (stored === 'zh' || stored === 'en') return stored
+  return window.navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
 }
 
 function normalizeDeviationStats(value: unknown, deviations: number[]): DeviationStats {
@@ -893,13 +1086,13 @@ function alphaTickPosition(value: number) {
   return ((value - ALPHA_MIN) / (ALPHA_MAX - ALPHA_MIN)) * 100
 }
 
-function alphaLabel(value: number) {
-  if (value <= -7.95) return `Welsch / Leclerc loss (${ALPHA_SYMBOL}->-inf)`
-  if (Math.abs(value - 2) < 0.05) return `L2 loss (${ALPHA_SYMBOL}=2)`
-  if (Math.abs(value - 1) < 0.05) return `Cauchy / Lorentzian loss (${ALPHA_SYMBOL}=1)`
-  if (Math.abs(value) < 0.05) return `Charbonnier loss (${ALPHA_SYMBOL}=0)`
-  if (Math.abs(value + 2) < 0.05) return `Geman-McClure loss (${ALPHA_SYMBOL}=-2)`
-  return `General robust loss (${ALPHA_SYMBOL}=${value.toFixed(1)})`
+function alphaLabel(value: number, copy: AppCopy) {
+  if (value <= -7.95) return copy.alphaLabels.welsch
+  if (Math.abs(value - 2) < 0.05) return copy.alphaLabels.l2
+  if (Math.abs(value - 1) < 0.05) return copy.alphaLabels.cauchy
+  if (Math.abs(value) < 0.05) return copy.alphaLabels.charbonnier
+  if (Math.abs(value + 2) < 0.05) return copy.alphaLabels.geman
+  return copy.alphaLabels.general(value)
 }
 
 function legendRampStyle(min: number, max: number) {
